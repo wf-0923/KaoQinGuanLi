@@ -1,0 +1,138 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<beans xmlns="http://www.springframework.org/schema/beans"
+       xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+       xmlns:context="http://www.springframework.org/schema/context"
+       xmlns:aop="http://www.springframework.org/schema/aop"
+       xmlns:tx="http://www.springframework.org/schema/tx" xmlns:task="http://www.springframework.org/schema/task"
+       xsi:schemaLocation="http://www.springframework.org/schema/beans
+        http://www.springframework.org/schema/beans/spring-beans.xsd
+        http://www.springframework.org/schema/context
+        http://www.springframework.org/schema/context/spring-context.xsd
+        http://www.springframework.org/schema/aop
+        http://www.springframework.org/schema/aop/spring-aop.xsd
+        http://www.springframework.org/schema/tx
+        http://www.springframework.org/schema/tx/spring-tx.xsd http://www.springframework.org/schema/task http://www.springframework.org/schema/task/spring-task.xsd">
+
+    <!--                 配置目录                   -->
+    <!--          Spring开启注解的扫描               -->
+    <!--          配置连接池,使用c3po连接池           -->
+    <!--          配置SqlSessionFactory工厂         -->
+    <!--  配置dao接口所在的包,Spring会自动查找其下的类   -->
+    <!--               配置事务管理器                -->
+    <!--                配置事务通知                 -->
+
+    <!--        备份的mybatis。xml配置文件            -->
+
+<!--思路：                                                                         -->
+<!--        把mybatis的配置整合到spring中后，sqlSessionFactory装入Spring的Ioc容器中，-->
+<!--    以后都由Ioc容器创建，有工厂sqlSessionFactory，就可以帮我创建sqlSession，-->
+<!--    有sqlSession，可以帮我创建代理对象，这个对象可以把代理存入Spring的Ioc容器，-->
+<!--    把dao放入Ioc容器，把service也存入Ioc容器 ，就可以依赖注入了-->
+    
+
+    <!-- spring开启注解的扫描-->
+    <context:component-scan base-package="cn.wf">
+        <context:exclude-filter type="annotation" expression="org.springframework.stereotype.Controller"/>
+    </context:component-scan>
+
+    <!--    Spring整合MyBatis框架-->
+    <!--    1.关联数据库配置文件-->
+    <!--    这里这样写，就可以让spring来读取配置文件database.properties-->
+    <context:property-placeholder location="classpath:database.properties"/>
+
+    <!--    配置连接池,使用c3po连接池-->
+    <bean id="dataSource" class="com.mchange.v2.c3p0.ComboPooledDataSource">
+        <property name="driverClass" value="${jdbc.driver}"/>
+        <property name="jdbcUrl" value="${jdbc.url}"/>
+        <property name="user" value="${jdbc.username}"/>
+        <property name="password" value="${jdbc.password}"/>
+    </bean>
+
+    <!--    配置SqlSessionFactory工厂-->
+    <!-- 自动扫描dao包下的全部mapper的   **.xml文件      -->
+    <!--这里的时映射方法，所以不用                           -->
+    <!--     <property name="mapperLocations" value="classpath:cn/wf/dao/.xml"/>-->
+    <bean id="sqlSessionFactory" class="org.mybatis.spring.SqlSessionFactoryBean">
+        <property name="dataSource" ref="dataSource"/>
+    </bean>
+
+
+    <!--配置dao接口所在的包,Spring会自动查找其下的类 -->
+    <!--value中的一定要用 。 连接，用 / 会有报错 如下:
+Could not autowire. No beans of 'UserDao' type found-->
+    <bean id="mpperScanner" class="org.mybatis.spring.mapper.MapperScannerConfigurer">
+        <property name="basePackage" value="cn.wf.dao"/>
+    </bean>
+
+    <!-- 配置SessionTemplate，对DaoSupport提供与数据库连接的实例,简化与数据库的连接 -->
+    <bean id="sqlSessionTemplate" class="org.mybatis.spring.SqlSessionTemplate">
+        <constructor-arg name="sqlSessionFactory" ref="sqlSessionFactory"/>
+    </bean>
+
+
+<!--    为了能够让整合后的mybatis通过注解的方式实现对mysql增加用户的操作-->
+<!--    需要配置spring框架声明事务管理-->
+    <!--配置事务管理器-->
+    <bean id="transactionManager" class="org.springframework.jdbc.datasource.DataSourceTransactionManager">
+        <property name="dataSource" ref="dataSource"/>
+    </bean>
+
+    <!--配置事务通知-->
+    <!--把事务管理器引过来transactionManager-->
+    <!--find*，以find打头的事务 设为只读-->
+    <tx:advice id="txAdvice" transaction-manager="transactionManager">
+        <tx:attributes>
+            <tx:method name="find*" read-only="true"/>
+            <tx:method name="*" isolation="DEFAULT"/>
+        </tx:attributes>
+    </tx:advice>
+
+    <!--配置AOP增强-->
+    <!--引入事务通知txAdvice-->
+    <!--pointcut="execution(* cn.wf.service.impl.*ServiceImpl.*(..))"        -->
+    <aop:config>
+        <aop:advisor advice-ref="txAdvice" pointcut="execution(* cn.wf.service.impl.*ServiceImpl.*(..))"/>
+    </aop:config>
+
+<!--   开启对@Scheduled注解的支持，定时任务Springtask-->
+    <task:annotation-driven/>
+
+
+
+<!--    下面是mybatis。xml的配置文件，由于mybatis的功能已经整合，所以不需要存在，下文为备份-->
+
+<!--    <?xml version="1.0" encoding="UTF-8" ?>-->
+<!--    <!DOCTYPE configuration-->
+<!--    PUBLIC "-//mybatis.org//DTD Config 3.0//EN"-->
+<!--    "http://mybatis.org/dtd/mybatis-3-config.dtd">-->
+<!--    <configuration>-->
+
+<!--        &lt;!&ndash;    配置环境&ndash;&gt;-->
+<!--        <environments default="mysql">-->
+<!--            <environment id="mysql">-->
+<!--                <transactionManager type="JDBC"/>-->
+<!--                <dataSource type="POOLED">-->
+<!--                    <property name="driver" value="com.mysql.cj.jdbc.Driver"/>-->
+<!--                    xml文件中不能用&，用&amp;代替-->
+<!--                    <property name="url" value="jdbc:mysql://localhost:3306/wfkaoqinxitong?useSSL=true&amp;useUnicode=true&amp;characterEncoding=utf8&amp;serverTimezone=UTC"/>-->
+<!--                    <property name="username" value="root"/>-->
+<!--                    <property name="password" value="123456"/>-->
+<!--                </dataSource>-->
+<!--            </environment>-->
+<!--        </environments>-->
+
+<!--        &lt;!&ndash;引入映射配置文件&ndash;&gt;-->
+<!--        <mappers>-->
+<!--            &lt;!&ndash;    用配置文件的方法就用resource&ndash;&gt;-->
+<!--            &lt;!&ndash;    <mapper resource="cn.wf.dao.UserDao"></mapper>&ndash;&gt;-->
+<!--            &lt;!&ndash;    用注解的方式引入映射配置文件就用下面2中&ndash;&gt;-->
+<!--            &lt;!&ndash;    每次添加新dao都要再添加，可以换成package，扫描一整个包，dao添加到包里就能被自动扫描&ndash;&gt;-->
+<!--            &lt;!&ndash;    <mapper class="cn.wf.dao.UserDao"/>&ndash;&gt;-->
+<!--            <package name="cn.wf.dao"/>-->
+<!--        </mappers>-->
+
+<!--    </configuration>-->
+
+
+
+</beans>
